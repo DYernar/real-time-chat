@@ -74,10 +74,8 @@ func main() {
 }
 
 func Websocket(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("new connection")
 
 	r.ParseForm()
-	fmt.Println(r.Form.Get("id"))
 	if r.Form.Get("id") == "" {
 		newID := chatsId
 		strid := strconv.Itoa(chatsId)
@@ -98,7 +96,6 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 
 		//create new cahnnel
 	} else {
-		fmt.Println("connecting to existing connection")
 		id, err := strconv.Atoi(r.FormValue("id"))
 		if err != nil {
 			fmt.Println("err in id", err)
