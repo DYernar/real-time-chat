@@ -121,6 +121,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request, ws *websocket.Con
 			delete(channels[id].Users, ws)
 			break
 		}
+		fmt.Println(msg)
 		// Send the newly received message to the broadcast channel
 		channels[id].Messages <- msg
 	}
@@ -129,6 +130,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request, ws *websocket.Con
 func (ch *Channel) handleMessages() {
 	for {
 		msg := <-ch.Messages
+		fmt.Println(msg)
 		for client := range ch.Users {
 			err := client.WriteJSON(msg)
 			if err != nil {
