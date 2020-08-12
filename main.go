@@ -1,21 +1,36 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/cors"
 )
 
-var clients = make(map[*websocket.Conn]bool)
-var broadcast = make(chan Message)
+var channels = make(map[int]*Channel)
+var chatsId = 0
+
+type Channel struct {
+	ID       int                      `json:"id"`
+	Upgrader *websocket.Upgrader      `json:"upgrader"`
+	Name     string                   `json:"name"`
+	Users    map[*websocket.Conn]bool `json:"users"`
+	Messages chan Message             `json:"Messages"`
+}
 
 type Message struct {
 	Name    string `json:"name"`
 	Message string `json:"message"`
+}
+
+type RespChannel struct {
+	ID   int    `json:"id"`
+	Name string `json:"string"`
 }
 
 var upgrader = websocket.Upgrader{
@@ -33,13 +48,23 @@ func main() {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("here")
+		fmt.Println(channels)
+		var channelsArr []RespChannel
+		for _, ch := range channels {
+			var respC RespChannel
+			respC.ID = ch.ID
+			respC.Name = ch.Name
+			channelsArr = append(channelsArr, respC)
+		}
+		fmt.Println(channelsArr)
+		json, _ := json.Marshal(channelsArr)
+		fmt.Println(json)
 		w.WriteHeader(200)
-		w.Write([]byte("Hello"))
+		w.Write([]byte(json))
 	})
 
 	mux.HandleFunc("/ws", Websocket)
-
-	go handleMessages()
 
 	handler := cors.Default().Handler(mux)
 	err := http.ListenAndServe(":"+port, handler)
@@ -49,39 +74,67 @@ func main() {
 }
 
 func Websocket(w http.ResponseWriter, r *http.Request) {
-	ws, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
+	fmt.Println("new connection")
 
-	defer ws.Close()
+	r.ParseForm()
+	if r.FormValue("id") == "" {
+		newID := chatsId
+		strid := strconv.Itoa(chatsId)
+		chatName := "chat " + strid
+		newChannel := Channel{}
+		newChannel.ID = newID
+		newChannel.Name = chatName
+		newChannel.Upgrader = &websocket.Upgrader{}
+		newChannel.Users = make(map[*websocket.Conn]bool)
+		newChannel.Messages = make(chan Message)
+		ws, _ := newChannel.Upgrader.Upgrade(w, r, nil)
+		newChannel.Users[ws] = true
+		channels[newID] = &newChannel
 
-	clients[ws] = true
-	fmt.Println("Connected")
+		go channels[newID].handleMessages()
+		go handleConnections(w, r, ws, newID)
+		chatsId++
 
-	for {
-		var msg Message
-		err := ws.ReadJSON(&msg)
-		fmt.Println(msg)
+		//create new cahnnel
+	} else {
+		id, err := strconv.Atoi(r.FormValue("id"))
 		if err != nil {
-			log.Printf("error: %s", err)
-			delete(clients, ws)
-			break
+			w.WriteHeader(http.StatusBadRequest)
+			return
 		}
+		ws, _ := channels[id].Upgrader.Upgrade(w, r, nil)
+		channels[id].Users[ws] = true
+		go handleConnections(w, r, ws, id)
 
-		broadcast <- msg
 	}
 }
 
-func handleMessages() {
+func handleConnections(w http.ResponseWriter, r *http.Request, ws *websocket.Conn, id int) {
+
 	for {
-		msg := <-broadcast
-		for client := range clients {
+		var msg Message
+		fmt.Println(msg)
+		// Read in a new message as JSON and map it to a Message object
+		err := ws.ReadJSON(&msg)
+		if err != nil {
+			log.Printf("error: %v", err)
+			delete(channels[id].Users, ws)
+			break
+		}
+		// Send the newly received message to the broadcast channel
+		channels[id].Messages <- msg
+	}
+}
+
+func (ch *Channel) handleMessages() {
+	for {
+		msg := <-ch.Messages
+		for client := range ch.Users {
 			err := client.WriteJSON(msg)
 			if err != nil {
 				log.Printf("error : %s", err)
 				client.Close()
-				delete(clients, client)
+				delete(ch.Users, client)
 			}
 		}
 	}
