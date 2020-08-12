@@ -77,8 +77,8 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("new connection")
 
 	r.ParseForm()
-	fmt.Println(r.Form.Get("id"))
-	if r.Form.Get("id") == "" {
+	fmt.Println(r.FormValue("id"))
+	if r.FormValue("id") == "" {
 		newID := chatsId
 		strid := strconv.Itoa(chatsId)
 		chatName := "chat " + strid
