@@ -97,8 +97,10 @@ func Websocket(w http.ResponseWriter, r *http.Request) {
 
 		//create new cahnnel
 	} else {
+		fmt.Println("connecting to existing connection")
 		id, err := strconv.Atoi(r.FormValue("id"))
 		if err != nil {
+			fmt.Println("err in id", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
